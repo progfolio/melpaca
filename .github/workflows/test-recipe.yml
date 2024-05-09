@@ -1,0 +1,30 @@
+name: test-recipe
+on:
+  pull_request:
+    paths:
+      - recipes/**
+    branches:
+      - master
+jobs:
+  test-recipe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install system dependencies #@TODO hg
+        run: sudo apt-get install -y git
+      - name: Install Emacs
+        uses: purcell/setup-emacs@master
+        with:
+          version: 29.3
+      - name: Checkout repo
+        uses: actions/checkout@v4
+      - name: Run tests
+        run: PULLREQUEST=${{ github.event.number }} emacs --batch -L . -l init.el
+      - name: Write PR Number # @HACK: PR number not available in workflow_run event context
+        run: echo ${{ github.event.number }} > pr.num
+      - uses: actions/upload-artifact@v4 
+        with:
+          name: pr
+          path: |
+            ./pr
+            ./pr.num
+          overwrite: true

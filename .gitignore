@@ -1,0 +1,7 @@
+*.elc
+*-autoloads.el
+*~
+*#
+feedback.txt
+.emacs.d/eln-cache
+.emacs.d/elpaca
