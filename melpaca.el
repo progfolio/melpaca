@@ -112,7 +112,9 @@
          (find-file (expand-file-name main (elpaca<-repo-dir e)))
          (melpaca--init-package-lint)
          (cl-loop for (line col type message) in (package-lint-buffer)
-                  collect (cons type (format "%s:%s %s" line col message)))))))
+                  do (push (cons type (format "%s:%s %s" line col message))
+                           melpaca--test-output))
+         nil))))
   "List of tests to run in test sub-process. Each is called with a PR alist."
   :type '(list function))
 
