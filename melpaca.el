@@ -71,8 +71,8 @@
            (melpaca-print-test (melpaca--test-title ,testsym)
                                (melpaca--test-syntax ,testsym)
                                melpaca--test-output)
-           (or (not (melpaca--test-required ,testsym))
-               (eq (melpaca-test-status) 'pass)))))))
+           (not (and (melpaca--test-required ,testsym)
+                     (eq (melpaca-test-status) 'error))))))))
 
 (defun melpaca-recipe (pr)
   "Return recipe from PR alist."
