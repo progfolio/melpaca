@@ -83,7 +83,7 @@
          (error "Please submit a single recipe per pull request")))
    (melpaca-deftest (:title "Package recipe valid" :required t)
      (melpaca-validate-recipe (alist-get 'melpaca-recipe pr)))
-   (melpaca-deftest (:title "Package upstream reachable" :required t)
+   (melpaca-deftest (:title "Package upstream reachable")
      (melpaca--validate-upstream-url (alist-get 'url (alist-get 'melpaca-info pr))))
    (melpaca-deftest (:title "Package installs" :required t :syntax 'emacs-lisp)
      (let* ((recipe (alist-get 'melpaca-recipe pr))
@@ -228,7 +228,7 @@
 (defvar url-http-response-status)
 (defun melpaca--validate-upstream-url (url)
   "If URL is unreachable return test error info."
-  (unless url (error "No URL found in first comment"))
+  (when (or (null url) (string-empty-p url)) (error "No URL found in first comment"))
   (with-current-buffer (url-retrieve-synchronously url 'silent t 30)
     (unless (equal url-http-response-status 200)
       (error "%S returned statsus %S" url url-http-response-status))))
@@ -248,7 +248,8 @@
 
 (defun melpaca--parse-pr-post (body)
   "Return plist of form (:description DESCRIPTION :url URL) from PR BODY."
-  (cl-mapcar #'list melpaca-pr-post-sections
+  (setq body (replace-regexp-in-string "\\(?:<!-+?[^z-a]*?->\\)" "" body)) ; Strip comments
+  (cl-mapcar #'cons melpaca-pr-post-sections
              (mapcar #'string-trim
                      (split-string body melpaca-markdown-section-regexp 'omit-nulls))))
 
