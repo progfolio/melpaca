@@ -290,7 +290,6 @@
   (with-current-buffer (get-buffer-create "*melpaca*")
     (let* ((pr (melpaca-pull-request number))
            (melpaca--blocking t)
-           (elpaca-test-start-functions nil)
            (elpaca-test-finish-functions (lambda (&rest _) (setq melpaca--blocking nil)))
            (standard-output (current-buffer)))
       (eval `(elpaca-test
