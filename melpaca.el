@@ -29,6 +29,7 @@
 
 ;;; Code:
 (require 'elpaca)
+(require 'elpaca-log)
 (require 'elpaca-test)
 (require 'elpaca-menu-melpa)
 
