@@ -97,7 +97,26 @@
        (when-let ((e (elpaca-get id))
                   ((eq (elpaca--status e) 'failed))
                   (info (nth 2 (car (elpaca<-log e)))))
-         (melpaca-error "%s" info)))))
+         (melpaca-error "%s" info))))
+   (melpaca-deftest (:title "Package compiles cleanly" :syntax 'emacs-lisp)
+     (let* ((id (car (melpaca-recipe pr)))
+            (pkg (symbol-name id))
+            (regexp (concat "^" pkg)))
+       (with-current-buffer (elpaca-log (concat regexp " | byte-comp | Warning\\|Error") t)
+         (setq melpaca--test-output
+               (cl-loop for entry in tabulated-list-entries
+                        for info = (aref (cadr entry) 2)
+                        collect (cons (if (string-match-p "Warning" info) 'warning 'error)
+                                      info))))))
+   (progn
+     (declare-function package-lint-buffer "package-lint")
+     (melpaca-deftest  (:title "Package satisfies package-lint" :syntax 'emacs-lisp)
+       (let* ((e (elpaca-get (car (melpaca-recipe pr))))
+              (main (elpaca<-main e)))
+         (find-file (expand-file-name main (elpaca<-repo-dir e)))
+         (melpaca--init-package-lint)
+         (cl-loop for (line col type message) in (package-lint-buffer)
+                  collect (cons type (format "%s:%s %s" line col message)))))))
   "List of tests to run in test sub-process. Each is called with a PR alist."
   :type '(list function))
 
@@ -222,28 +241,6 @@
   "Display test results."
   (pop-to-buffer (get-buffer-create "*melpaca*") '((display-buffer-reuse-window))))
 
-(declare-function package-lint-buffer "package-lint")
-(defun melpaca--run-tests (recipe)
-  "Test RECIPE."
-  (let* ((id (car recipe))
-         (pkg (symbol-name id))
-         (regexp (concat "^" pkg)))
-    (and
-
-     (melpaca--test
-      "Package compiles cleanly" 'emacs-lisp
-      (with-current-buffer (elpaca-log (concat regexp " | byte-comp | Warning\\|Error") t)
-        (cl-loop for entry in tabulated-list-entries
-                 for info = (aref (cadr entry) 2)
-                 collect (cons (if (string-match-p "Warning" info) 'warning 'error)
-                               info))))
-     (let* ((e (elpaca-get id))
-            (main (elpaca<-main e)))
-       (find-file (expand-file-name main (elpaca<-repo-dir e)))
-       (melpaca--test
-        (format "%s satisfies package-lint" main) 'emacs-lisp
-        (cl-loop for (line col type message) in (package-lint-buffer)
-                 collect (cons type (format "%s:%s %s" line col message))))))))
 
 (defvar url-http-end-of-headers)
 (defun melpaca-pull-request (number)
