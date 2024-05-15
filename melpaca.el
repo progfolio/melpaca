@@ -43,34 +43,89 @@
 
 (defcustom melpaca-repo "melpa/melpa" "USER/REPO to request PR info from." :type 'string)
 
+(defcustom melpaca-markdown-section-regexp "\\(?:^[[:space:]]*###[^z-a]*?$\\)"
+  "Regexp for splitting PR markdown post into sections."
+  :type 'string)
+
+(defcustom melpaca-pr-post-sections '(:description :url :associations)
+  "List of PR post sections."
+  :type '(list symbol))
+
+(defcustom melpaca-test-status-indicators '((error . "❌") (warning . "⚠️") (pass . "✅"))
+  "Alist of form ((STATUS . STRING)...)."
+  :type 'alist)
+
+(defvar melpaca--test-output nil)
+(eval-and-compile
+  (defmacro melpaca-deftest (arglist &rest body)
+    "Run test thunk with ARGLIST and BODY."
+    (declare (indent 1) (debug t))
+    (let ((testsym (make-symbol "test"))
+          (resultsym (make-symbol "result"))
+          (passsym (make-symbol "pass"))
+          (failsym (make-symbol "fail")))
+      `(lambda (pr)
+         (let* ((melpaca--test-output nil)
+                (,testsym (melpaca--test ,@arglist))
+                (,resultsym (condition-case err
+                                (cons ',passsym ,(macroexp-progn body))
+                              ((error)
+                               (melpaca-error "%S" err)
+                               (cons ',failsym err)))))
+           (melpaca-print-test (melpaca--test-title ,testsym)
+                               (melpaca--test-syntax ,testsym)
+                               melpaca--test-output)
+           (not (and (melpaca--test-required ,testsym)
+                     (eq (car-safe ,resultsym) ',failsym))))))))
+
+(defun melpaca-recipe (pr)
+  "Return recipe from PR alist."
+  (alist-get 'recipe (alist-get 'melpaca pr)))
+
+(defcustom melpaca-test-functions
+  (list
+   (melpaca-deftest (:title "Testing Recipe" :required t :syntax 'emacs-lisp)
+     (princ (melpaca-recipe pr)))
+   (melpaca-deftest (:title "Submission contains 1 recipe" :required t)
+     (unless (= (alist-get 'changed_files pr) 1)
+       (melpaca-error "Please submit a single recipe per pull request")))
+   (melpaca-deftest (:title "Package recipe valid" :required t)
+     (melpaca-validate-recipe (melpaca-recipe pr)))
+   (melpaca-deftest (:title "Package upstream reachable" :required t)
+     (melpaca--validate-upstream-url (alist-get 'info (alist-get 'melpaca pr))))
+   (melpaca-deftest (:title "Package installs" :required t :syntax 'emacs-lisp)
+     (let* ((recipe (melpaca-recipe pr))
+            (id (car recipe)))
+       (elpaca-try recipe)
+       (elpaca-wait)
+       (when-let ((e (elpaca-get id))
+                  ((eq (elpaca--status e) 'failed))
+                  (info (nth 2 (car (elpaca<-log e)))))
+         (melpaca-error "%s" info)))))
+  "List of tests to run in test sub-process. Each is called with a PR alist."
+  :type '(list function))
+
 (defvar melpaca-generic-fetchers '(git hg))
 (defvar melpaca-fetchers (append melpaca-generic-fetchers '(github gitlab codeberg sourcehut)))
 (defvar melpaca-poll-interval 0.1)
 (defvar melpaca-test-timeout 60)
 (defvar melpaca--blocking nil)
+(defvar melpaca--location (or load-file-name (buffer-file-name)))
 
 (defun melpaca--validate-id (object)
   "Signal error if OBJECT is not a valid MELPA recipe ID."
-  (let ((warnings nil)
-        (id (or (car-safe object) (error "Reicpe must be a non-nil list"))))
+  (let ((id (or (car-safe object) (error "Reicpe must be a non-nil list"))))
     (unless (symbolp id) (error "Recipe ID %S must be a symbol" id))
     (unless (> (length (symbol-name id)) 2)
-      (push (cons 'warning (format "Recipe ID %s should be longer than 2 characters" id))
-            warnings))
-    ;; @TODO: Make configurable depending on type of PR?
-    ;; We could error unless PR description is an update to existing recipe.
+      (melpaca-warn "Recipe ID %s should be longer than 2 characters" id))
     (when (elpaca-menu-item id) ;;@TODO: hg type support in menu
-      (push (cons 'warning (format "Recipe ID %s already present in MELPA archive" id))
-            warnings))
+      (melpaca-warn "Recipe ID %s already present in MELPA archive" id))
     (when (alist-get id package--builtin-versions)
-      (push (cons 'warning (format "Recipe ID %s shadows built-in Emacs package" id))
-            warnings))
+      (melpaca-warn "Recipe ID %s shadows built-in Emacs package" id))
     (when-let ((repo (plist-get :repo (cdr object)))
                (name (cadr (split-string repo "/" )))
                ((not (equal (file-name-sans-extension name) (symbol-name id)))))
-      (push (cons 'warning (format "Recipe ID %s does not match :repo name %s" id name))
-            warnings))
-    warnings))
+      (melpaca-warn "Recipe ID %s does not match :repo name %s" id name))))
 
 (defun melpaca--validate-files (files)
   "Signal error if FILES is not a valid MELPA recipe :files list."
@@ -94,63 +149,57 @@
 
 (defun melpaca-validate-recipe (object)
   "Validate recipe OBJECT."
-  (condition-case err
-      (cl-destructuring-bind ( &key fetcher url repo commit branch version-regexp files old-names
-                               &aux (warnings (melpaca--validate-id object)))
-          (or (cdr object) (error "No :fetcher"))
-        (unless (memq fetcher melpaca-fetchers)
-          (error ":fetcher must be one of the following symbols: %S" melpaca-fetchers))
-        (if (memq fetcher melpaca-generic-fetchers)
-            (progn (when repo (error ":repo incompatible with :fetcher %s" fetcher))
-                   (or (stringp url) (error ":fetcher %s requires :url string" fetcher)))
-          (when url (error ":url incompatible with :fetcher %s" fetcher)))
-        ;;@TODO check maintainer against github user name?
-        (unless (or (memq fetcher melpaca-generic-fetchers)
-                    (and (stringp repo) (string-match-p "[^/]+/[^/]+" repo)))
-          (error ":repo must be a string of form \"user-name/repo-name\""))
-        (when (and (eq fetcher 'sourcehut) (string-match-p "~" repo))
-          (error ":repo must not include \"~\" in Sourcehut user-name"))
-        (when (and branch commit) (error "Cannot use :branch and :commit at same time"))
-        (when commit
-          (when (eq fetcher 'hg) (push (cons 'warning (format ":fetcher hg ignores :commit %s" commit))
-                                       warnings))
-          (unless (stringp commit) (error ":commit must be a string")))
-        (when branch
-          ;;@TODO: :branch valid for :fetcher hg?
-          (unless (stringp branch) (error ":branch must be a string")))
-        (when version-regexp
-          (push (cons 'warning ":version-regexp rarely necessary") warnings)
-          (unless (stringp version-regexp) (error ":verson-regexp must be a string")))
-        (when files
-          (push (cons 'warning ":files rarely necessary") warnings)
-          (melpaca--validate-files files))
-        (when old-names (unless (and (listp old-names) (cl-every #'symbolp old-names))
-                          (error ":old-names must be a list of symbols")))
-        warnings)
-    ((error) (list (cons 'error (cadr err))))))
+  (cl-destructuring-bind
+      (&key fetcher url repo commit branch version-regexp files old-names)
+      (or (cdr object) (error "No :fetcher"))
+    (melpaca--validate-id object)
+    (unless (memq fetcher melpaca-fetchers)
+      (error ":fetcher must be one of the following symbols: %S" melpaca-fetchers))
+    (if (memq fetcher melpaca-generic-fetchers)
+        (progn (when repo (error ":repo incompatible with :fetcher %s" fetcher))
+               (or (stringp url) (error ":fetcher %s requires :url string" fetcher)))
+      (when url (error ":url incompatible with :fetcher %s" fetcher)))
+    ;;@TODO check maintainer against github user name?
+    (unless (or (memq fetcher melpaca-generic-fetchers)
+                (and (stringp repo) (string-match-p "[^/]+/[^/]+" repo)))
+      (error ":repo must be a string of form \"user-name/repo-name\""))
+    (when (and (eq fetcher 'sourcehut) (string-match-p "~" repo))
+      (error ":repo must not include \"~\" in Sourcehut user-name"))
+    (when (and branch commit) (error "Cannot use :branch and :commit at same time"))
+    (when commit
+      (when (eq fetcher 'hg) (melpaca-warn ":fetcher hg ignores :commit %s" commit))
+      (unless (stringp commit) (error ":commit must be a string")))
+    (when branch
+      ;;@TODO: :branch valid for :fetcher hg?
+      (unless (stringp branch) (error ":branch must be a string")))
+    (when version-regexp
+      (melpaca-warn ":version-regexp rarely necessary")
+      (unless (stringp version-regexp) (error ":verson-regexp must be a string")))
+    (when files
+      (melpaca-warn ":files rarely necessary")
+      (melpaca--validate-files files))
+    (when old-names (unless (and (listp old-names) (cl-every #'symbolp old-names))
+                      (error ":old-names must be a list of symbols")))))
 
-(declare-function elpaca-log "elpaca-log")
-(defun melpaca--test (heading type results)
-  "Print HEADING, test RESULTS of TYPE.
-Return t if test passes, nil otherwise."
-  (let* ((statuses (mapcar #'car results))
-         (status (cond ((memq 'error statuses) 'error)
-                       ((memq 'warning statuses) 'warning)))
-         (status-symbols '((error . "❌") (warning . "⚠️"))))
+(defun melpaca-test-status (&optional results)
+  "Return overall status of test RESULTS."
+  (unless results (setq results melpaca--test-output))
+  (cond ((assoc 'error melpaca--test-output) 'error)
+        ((assoc 'warning melpaca--test-output) 'warning)
+        (t 'pass)))
+
+(defun melpaca-print-test (heading type results)
+  "Print HEADING, test RESULTS of TYPE."
+  (let* ((status (melpaca-test-status results))
+         (passp (eq status 'pass)))
     (princ (concat "\n"
-                   (when status "<details open><summary>")
-                   (alist-get status status-symbols "✅") " " heading
-                   (when status "</summary>")
+                   (format "<details open=%S><summary>" (when passp "false" "true"))
+                   (alist-get status melpaca-test-status-indicators) " " heading
+                   (unless passp  "</summary>")
                    "\n"))
-    (when status
-      (princ (format "\n```%s\n%s\n```\n</details>"
-                     (or type "")
-                     (mapconcat (lambda (r)
-                                  (format "%s"
-                                          ;;(alist-get (car r) status-symbols)
-                                          (cdr r)))
-                                results "\n"))))
-    (not (eq status 'error))))
+    (princ (format "\n```%s\n%s\n```\n</details>"
+                   (or type "")
+                   (mapconcat (lambda (r) (format "%s" (cdr r))) results "\n")))))
 
 (defvar package-archives)
 (defun melpaca--init-package-lint ()
@@ -174,10 +223,9 @@ Return t if test passes, nil otherwise."
     ((error) (list (cons 'error err)))))
 
 (defun melpaca--display-results ()
-  "Print test results."
+  "Display test results."
   (pop-to-buffer (current-buffer) '((display-buffer-reuse-window))))
 
-(defvar melpaca--location (or load-file-name (buffer-file-name)))
 (declare-function package-lint-buffer "package-lint")
 (defun melpaca--run-tests (recipe)
   "Test RECIPE."
@@ -185,15 +233,7 @@ Return t if test passes, nil otherwise."
          (pkg (symbol-name id))
          (regexp (concat "^" pkg)))
     (and
-     (melpaca--test
-      "Package installs" 'emacs-lisp
-      (condition-case err
-          (progn (elpaca-try recipe)
-                 (elpaca-wait)
-                 (when-let ((e (elpaca-get id))
-                            ((eq (elpaca--status e) 'failed)))
-                   (list (cons 'error (nth 2 (car (elpaca<-log e)))))))
-        ((error) (list (cons 'error err)))))
+
      (melpaca--test
       "Package compiles cleanly" 'emacs-lisp
       (with-current-buffer (elpaca-log (concat regexp " | byte-comp | Warning\\|Error") t)
@@ -230,47 +270,58 @@ Return t if test passes, nil otherwise."
     (backward-list)
     (read (current-buffer))))
 
-(defvar melpaca-markdown-section-regexp "\\(?:^[[:space:]]*###[^z-a]*?$\\)")
 (defun melpaca--parse-pr-post (body)
   "Return plist of form (:description DESCRIPTION :url URL) from PR BODY."
-  (let ((sections (mapcar #'string-trim (split-string body melpaca-markdown-section-regexp))))
-    (list :description (nth 1 sections) :url (nth 2 sections))))
+  (cl-mapcar #'list melpaca-pr-post-sections
+             (mapcar #'string-trim
+                     (split-string body melpaca-markdown-section-regexp 'omit-nulls))))
 
-(cl-defun melpaca (number)
+(cl-defstruct (melpaca--test (:constructor melpaca--test) (:copier nil) (:named))
+  "Test struct."
+  title required syntax)
+
+(defun melpaca-test-output (type info &rest args)
+  "Push TYPE INFO formatted with ARGS to `melpaca--test-output'."
+  (push (cons type (apply #'format info args)) melpaca--test-output))
+
+(defun melpaca-error (info &rest args)
+  "Fail test with INFO ARGS."
+  (apply #'melpaca-test-output 'error info args))
+
+(defun melpaca-warn (info &rest args)
+  "Warn with INFO ARGS."
+  (apply #'melpaca-test-output 'warning info args))
+
+(cl-defun melpaca (number) ;;@TODO make test sequence user option
   "Provide feedback for Pull Request with NUMBER."
   (with-current-buffer (get-buffer-create "*melpaca*")
     (let* ((pr (melpaca-pull-request number))
-           (_ (when-let ((message (alist-get 'message pr)))
-                (error "Github API Response: %s" message)))
-           (recipe (melpaca--diff-to-recipe (alist-get 'diff_url pr)))
-           (info (melpaca--parse-pr-post (alist-get 'body pr)))
+           (melpaca--blocking t)
+           (elpaca-test-start-functions nil)
+           (elpaca-test-finish-functions (lambda (&rest _) (setq melpaca--blocking nil)))
            (standard-output (current-buffer)))
-      (princ (format "Testing Recipe\n\n```emacs-lisp\n%S\n```\n" recipe))
-      (and
-       (melpaca--test
-        "Submission contains 1 recipe" nil
-        (unless (= (alist-get 'changed_files pr) 1)
-          (list (cons 'error "Submission contains more than 1 recipe.
-Please submit 1 recipe at a time."))))
-       (melpaca--test "Package recipe valid" nil (melpaca-validate-recipe recipe))
-       (melpaca--test "Package upstream reachable" nil
-                      (melpaca--validate-upstream-url (plist-get info :url)))
-       (let ((melpaca--blocking t)
-             (elpaca-test-start-functions nil)
-             (elpaca-test-finish-functions
-              (lambda (&rest _) (setq melpaca--blocking nil))))
-         (eval `(elpaca-test
-                  :ref local
-                  :buffer "*melpaca*"
-                  :timeout ,melpaca-test-timeout
-                  :early-init (setq elpaca-menu-functions '(elpaca-menu-melpa))
-                  :init
-                  (load ,melpaca--location nil 'nomessage) ;;Load this version of melpaca
-                  (melpaca--init-package-lint)
-                  (melpaca--run-tests ',recipe))
-               t)
-         (while melpaca--blocking (sit-for melpaca-poll-interval))))
-      (funcall melpaca-after-test-function))))
+      (when-let ((err (alist-get 'message pr))) (error "Github API Response: %s" err))
+      (push (cons 'melpaca
+                  (list (cons 'recipe (melpaca--diff-to-recipe (alist-get 'diff_url pr)))
+                        (cons 'info (melpaca--parse-pr-post (alist-get 'body pr)))))
+            pr)
+      (eval `(elpaca-test
+               :ref local
+               :buffer "*melpaca*"
+               :timeout ,melpaca-test-timeout
+               :early-init (setq elpaca-menu-functions '(elpaca-menu-melpa))
+               :init
+               (load ,melpaca--location nil 'nomessage) ;;Load this version of melpaca
+               (let ((melpaca-test-functions ',melpaca-test-functions)
+                     (melpaca-test-status-indicators ',melpaca-test-status-indicators)
+                     (melpaca-generic-fetchers ',melpaca-generic-fetchers)
+                     (melpaca-fetchers ',melpaca-fetchers)
+                     (melpaca-poll-interval ,melpaca-poll-interval)
+                     (melpaca-test-timeout ,melpaca-test-timeout))
+                 (run-hook-with-args-until-failure 'melpaca-test-functions ',pr)))
+            t)
+      (while melpaca--blocking (sit-for melpaca-poll-interval))))
+  (funcall melpaca-after-test-function))
 
 ;;@TODO: Report git-blamed :old-names incorrect element type string
 ;;@TODO: License Check
