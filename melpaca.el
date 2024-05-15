@@ -192,7 +192,7 @@ Return t if test passes, nil otherwise."
                  (elpaca-wait)
                  (when (eq (elpaca--status id) 'failed)
                    (list (cons 'error (nth 2 (car (elpaca<-log (elpaca-get 'doct))))))))
-        ((error) (list (cons 'error (cadr err))))))
+        ((error) (list (cons 'error err)))))
      (melpaca--test
       "Package compiles cleanly" 'emacs-lisp
       (with-current-buffer (elpaca-log (concat regexp " | byte-comp | Warning\\|Error") t)
