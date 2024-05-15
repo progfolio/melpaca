@@ -236,6 +236,7 @@ Return t if test passes, nil otherwise."
                 (error "Github API Response: %s" message)))
            (recipe (melpaca--diff-to-recipe (alist-get 'diff_url pr)))
            (standard-output (current-buffer)))
+      (princ (format "Testing Recipe\n\n```emacs-lisp\n%S\n```\n" recipe))
       (and
        (melpaca--test
         "Submission contains 1 recipe" nil
