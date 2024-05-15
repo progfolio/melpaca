@@ -231,28 +231,14 @@
 (defvar url-http-response-status)
 (defun melpaca--validate-upstream-url (url)
   "If URL is unreachable return test error info."
-  (condition-case err
-      (with-current-buffer (url-retrieve-synchronously url 'silent t 30)
-        (unless (equal url-http-response-status 200)
-          (cons 'error (format "%S returned statsus %S" url url-http-response-status))))
-    ((error) (list (cons 'error err)))))
+  (unless url (error "No URL found in first comment"))
+  (with-current-buffer (url-retrieve-synchronously url 'silent t 30)
+    (unless (equal url-http-response-status 200)
+      (error "%S returned statsus %S" url url-http-response-status))))
 
 (defun melpaca--display-results ()
   "Display test results."
   (pop-to-buffer (get-buffer-create "*melpaca*") '((display-buffer-reuse-window))))
-
-
-(defvar url-http-end-of-headers)
-(defun melpaca-pull-request (number)
-  "Return data for pull request with NUMBER."
-  (unless melpaca-repo (error "Nil melpaca-repo"))
-  (let ((url-request-method "GET")
-        (url-request-extra-headers '(("Accept" . "application/vnd.github+json")))
-        (request (format "https://api.github.com/repos/%s/pulls/%s" melpaca-repo number)))
-    (message "requesting: %S" request)
-    (with-current-buffer (url-retrieve-synchronously request)
-      (goto-char url-http-end-of-headers)
-      (json-parse-buffer :object-type 'alist :null-object nil :false-object nil))))
 
 (defun melpaca--diff-to-recipe (url)
   "Return recipe from diff URL."
@@ -268,6 +254,24 @@
   (cl-mapcar #'list melpaca-pr-post-sections
              (mapcar #'string-trim
                      (split-string body melpaca-markdown-section-regexp 'omit-nulls))))
+
+(defvar url-http-end-of-headers)
+(defun melpaca-pull-request (number)
+  "Return data for pull request with NUMBER."
+  (unless melpaca-repo (error "Nil melpaca-repo"))
+  (let ((url-request-method "GET")
+        (url-request-extra-headers '(("Accept" . "application/vnd.github+json")))
+        (request (format "https://api.github.com/repos/%s/pulls/%s" melpaca-repo number)))
+    (message "requesting: %S" request)
+    (with-current-buffer (url-retrieve-synchronously request)
+      (goto-char url-http-end-of-headers)
+      (let ((pr (json-parse-buffer :object-type 'alist :null-object nil :false-object nil)))
+        (when-let ((err (alist-get 'message pr))) (error "Github API Response: %s" err))
+        (push (cons 'melpaca
+                    (list (cons 'recipe (melpaca--diff-to-recipe (alist-get 'diff_url pr)))
+                          (cons 'info (melpaca--parse-pr-post (alist-get 'body pr)))))
+              pr)
+        pr))))
 
 (cl-defstruct (melpaca--test (:constructor melpaca--test) (:copier nil) (:named))
   "Test struct."
@@ -293,11 +297,6 @@
            (elpaca-test-start-functions nil)
            (elpaca-test-finish-functions (lambda (&rest _) (setq melpaca--blocking nil)))
            (standard-output (current-buffer)))
-      (when-let ((err (alist-get 'message pr))) (error "Github API Response: %s" err))
-      (push (cons 'melpaca
-                  (list (cons 'recipe (melpaca--diff-to-recipe (alist-get 'diff_url pr)))
-                        (cons 'info (melpaca--parse-pr-post (alist-get 'body pr)))))
-            pr)
       (eval `(elpaca-test
                :ref local
                :buffer "*melpaca*"
