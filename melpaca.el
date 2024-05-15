@@ -47,7 +47,7 @@
   "Regexp for splitting PR markdown post into sections."
   :type 'string)
 
-(defcustom melpaca-pr-post-sections '(:description :url :associations)
+(defcustom melpaca-pr-post-sections '(description url associations)
   "List of PR post sections."
   :type '(list symbol))
 
@@ -74,23 +74,19 @@
            (not (and (melpaca--test-required ,testsym)
                      (eq (melpaca-test-status) 'error))))))))
 
-(defun melpaca-recipe (pr)
-  "Return recipe from PR alist."
-  (alist-get 'recipe (alist-get 'melpaca pr)))
-
 (defcustom melpaca-test-functions
   (list
    (melpaca-deftest (:title "PR recipe parses" :required t :syntax 'emacs-lisp)
-     (or (melpaca-recipe pr) (error "Unable to parse recipe")))
+     (or (alist-get 'melpaca-recipe pr) (error "Unable to parse recipe")))
    (melpaca-deftest (:title "Submission contains 1 recipe" :required t)
      (or (= (alist-get 'changed_files pr) 1)
          (error "Please submit a single recipe per pull request")))
    (melpaca-deftest (:title "Package recipe valid" :required t)
-     (melpaca-validate-recipe (melpaca-recipe pr)))
+     (melpaca-validate-recipe (alist-get 'melpaca-recipe pr)))
    (melpaca-deftest (:title "Package upstream reachable" :required t)
-     (melpaca--validate-upstream-url (alist-get 'url (alist-get 'melpaca pr))))
+     (melpaca--validate-upstream-url (alist-get 'url (alist-get 'melpaca-info pr))))
    (melpaca-deftest (:title "Package installs" :required t :syntax 'emacs-lisp)
-     (let* ((recipe (melpaca-recipe pr))
+     (let* ((recipe (alist-get 'melpaca-recipe pr))
             (id (car recipe)))
        (elpaca-try recipe)
        (elpaca-wait)
@@ -99,7 +95,7 @@
                   (info (nth 2 (car (elpaca<-log e)))))
          (melpaca-error "%s" info))))
    (melpaca-deftest (:title "Package compiles cleanly" :syntax 'emacs-lisp)
-     (let* ((id (car (melpaca-recipe pr)))
+     (let* ((id (car (alist-get 'melpaca-recipe pr)))
             (pkg (symbol-name id))
             (regexp (concat "^" pkg)))
        (with-current-buffer (elpaca-log (concat regexp " | byte-comp | Warning\\|Error") t)
@@ -111,7 +107,7 @@
    (progn
      (declare-function package-lint-buffer "package-lint")
      (melpaca-deftest  (:title "Package satisfies package-lint" :syntax 'emacs-lisp)
-       (let* ((e (elpaca-get (car (melpaca-recipe pr))))
+       (let* ((e (elpaca-get (car (alist-get 'melpaca-recipe pr))))
               (main (elpaca<-main e)))
          (find-file (expand-file-name main (elpaca<-repo-dir e)))
          (melpaca--init-package-lint)
@@ -268,10 +264,8 @@
       (goto-char url-http-end-of-headers)
       (let ((pr (json-parse-buffer :object-type 'alist :null-object nil :false-object nil)))
         (when-let ((err (alist-get 'message pr))) (error "Github API Response: %s" err))
-        (push (cons 'melpaca
-                    (list (cons 'recipe (melpaca--diff-to-recipe (alist-get 'diff_url pr)))
-                          (cons 'info (melpaca--parse-pr-post (alist-get 'body pr)))))
-              pr)
+        (push (cons 'melpaca-recipe (melpaca--diff-to-recipe (alist-get 'diff_url pr))) pr)
+        (push (cons 'melpaca-info (melpaca--parse-pr-post (alist-get 'body pr))) pr)
         pr))))
 
 (cl-defstruct (melpaca--test (:constructor melpaca--test) (:copier nil) (:named))
