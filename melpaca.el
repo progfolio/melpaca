@@ -230,34 +230,36 @@ Return t if test passes, nil otherwise."
 
 (cl-defun melpaca (number)
   "Provide feedback for Pull Request with NUMBER."
-  (let* ((pr (melpaca-pull-request number))
-         (_ (when-let ((message (alist-get 'message pr)))
-              (error "Github API Response: %s" message)))
-         (recipe (melpaca--diff-to-recipe (alist-get 'diff_url pr))))
-    (and
-     (melpaca--test
-      "Submission contains 1 recipe" nil
-      (unless (= (alist-get 'changed_files pr) 1)
-        (list (cons 'error "Submission contains more than 1 recipe.
+  (with-current-buffer (get-buffer-create "*melpaca*")
+    (let* ((pr (melpaca-pull-request number))
+           (_ (when-let ((message (alist-get 'message pr)))
+                (error "Github API Response: %s" message)))
+           (recipe (melpaca--diff-to-recipe (alist-get 'diff_url pr)))
+           (standard-output (current-buffer)))
+      (and
+       (melpaca--test
+        "Submission contains 1 recipe" nil
+        (unless (= (alist-get 'changed_files pr) 1)
+          (list (cons 'error "Submission contains more than 1 recipe.
 Please submit 1 recipe at a time."))))
-     (melpaca--test "Package recipe valid" nil (melpaca-validate-recipe recipe))
-     ;;(melpaca--test "Package upstream reachable" nil (melpaca--validate-upstream-url link))
-     (let ((melpaca--blocking t)
-           (elpaca-test-start-functions nil)
-           (elpaca-test-finish-functions
-            (lambda (&rest _) (setq melpaca--blocking nil))))
-       (eval `(elpaca-test
-                :ref local
-                :buffer "*melpaca*"
-                :timeout ,melpaca-test-timeout
-                :early-init (setq elpaca-menu-functions '(elpaca-menu-melpa))
-                :init
-                (load ,melpaca--location nil 'nomessage) ;;Load this version of melpaca
-                (melpaca--init-package-lint)
-                (melpaca--run-tests ',recipe))
-             t)
-       (while melpaca--blocking (sit-for melpaca-poll-interval))))
-    (funcall melpaca-after-test-function)))
+       (melpaca--test "Package recipe valid" nil (melpaca-validate-recipe recipe))
+       ;;(melpaca--test "Package upstream reachable" nil (melpaca--validate-upstream-url link))
+       (let ((melpaca--blocking t)
+             (elpaca-test-start-functions nil)
+             (elpaca-test-finish-functions
+              (lambda (&rest _) (setq melpaca--blocking nil))))
+         (eval `(elpaca-test
+                  :ref local
+                  :buffer "*melpaca*"
+                  :timeout ,melpaca-test-timeout
+                  :early-init (setq elpaca-menu-functions '(elpaca-menu-melpa))
+                  :init
+                  (load ,melpaca--location nil 'nomessage) ;;Load this version of melpaca
+                  (melpaca--init-package-lint)
+                  (melpaca--run-tests ',recipe))
+               t)
+         (while melpaca--blocking (sit-for melpaca-poll-interval))))
+      (funcall melpaca-after-test-function))))
 
 ;;@TODO: Report git-blamed :old-names incorrect element type string
 ;;@TODO: License Check

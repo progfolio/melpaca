@@ -59,10 +59,8 @@
                      (kill-emacs)))))
 
 (declare-function melpaca "melpaca")
-(with-current-buffer (get-buffer-create "*melpaca*")
-  (let ((standard-output (current-buffer))
-        (melpaca-repo "progfolio/melpaca"))
-    (melpaca (getenv "PULLREQUEST"))))
+(let ((melpaca-repo "progfolio/melpaca"))
+  (melpaca (getenv "PULLREQUEST")))
 
 (provide 'init)
 
