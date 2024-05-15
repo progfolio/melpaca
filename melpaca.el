@@ -229,6 +229,12 @@ Return t if test passes, nil otherwise."
     (backward-list)
     (read (current-buffer))))
 
+(defvar melpaca-markdown-section-regexp "\\(?:^[[:space:]]*###[^z-a]*?$\\)")
+(defun melpaca--parse-pr-post (body)
+  "Return plist of form (:description DESCRIPTION :url URL) from PR BODY."
+  (let ((sections (mapcar #'string-trim (split-string body melpaca-markdown-section-regexp))))
+    (list :description (nth 1 sections) :url (nth 2 sections))))
+
 (cl-defun melpaca (number)
   "Provide feedback for Pull Request with NUMBER."
   (with-current-buffer (get-buffer-create "*melpaca*")
@@ -236,6 +242,7 @@ Return t if test passes, nil otherwise."
            (_ (when-let ((message (alist-get 'message pr)))
                 (error "Github API Response: %s" message)))
            (recipe (melpaca--diff-to-recipe (alist-get 'diff_url pr)))
+           (info (melpaca--parse-pr-post (alist-get 'body pr)))
            (standard-output (current-buffer)))
       (princ (format "Testing Recipe\n\n```emacs-lisp\n%S\n```\n" recipe))
       (and
@@ -245,7 +252,8 @@ Return t if test passes, nil otherwise."
           (list (cons 'error "Submission contains more than 1 recipe.
 Please submit 1 recipe at a time."))))
        (melpaca--test "Package recipe valid" nil (melpaca-validate-recipe recipe))
-       ;;(melpaca--test "Package upstream reachable" nil (melpaca--validate-upstream-url link))
+       (melpaca--test "Package upstream reachable" nil
+                      (melpaca--validate-upstream-url (plist-get info :url)))
        (let ((melpaca--blocking t)
              (elpaca-test-start-functions nil)
              (elpaca-test-finish-functions
