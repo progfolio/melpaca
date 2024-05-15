@@ -219,7 +219,7 @@
 
 (defun melpaca--display-results ()
   "Display test results."
-  (pop-to-buffer (current-buffer) '((display-buffer-reuse-window))))
+  (pop-to-buffer (get-buffer-create "*melpaca*") '((display-buffer-reuse-window))))
 
 (declare-function package-lint-buffer "package-lint")
 (defun melpaca--run-tests (recipe)
