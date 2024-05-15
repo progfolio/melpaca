@@ -188,7 +188,7 @@
   (let* ((status (melpaca-test-status results))
          (passp (eq status 'pass)))
     (princ (concat "\n"
-                   (format "<details open=%S><summary>" (if passp "false" "true"))
+                   (concat "<details" (unless passp " open") "><summary>")
                    (alist-get status melpaca-test-status-indicators) " " heading
                    (unless passp  "</summary>")
                    "\n\n"))
