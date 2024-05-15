@@ -206,15 +206,16 @@
 (defun melpaca-print-test (heading type results)
   "Print HEADING, test RESULTS of TYPE."
   (let* ((status (melpaca-test-status results))
-         (passp (eq status 'pass)))
-    (princ (concat "\n"
-                   (concat "<details" (unless passp " open") "><summary>")
-                   (alist-get status melpaca-test-status-indicators) " " heading
-                   (unless passp  "</summary>")
-                   "\n\n"))
-    (princ (format "\n```%s\n%s\n```\n</details>\n"
-                   (or type "")
-                   (mapconcat (lambda (r) (format "%s" (cdr r))) results "\n")))))
+         (passp (eq status 'pass))
+         (summary (concat (alist-get status melpaca-test-status-indicators)
+                          " " heading "\n\n")))
+    (princ "\n")
+    (if (not results) (princ summary)
+      (princ (format "<details%s><summary>%s</summary>\n\n```%s\n%s\n```\n</details>\n"
+                     (if passp "" " open")
+                     (string-trim summary)
+                     (or type "")
+                     (mapconcat (lambda (r) (format "%s" (cdr r))) results "\n"))))))
 
 (defvar package-archives)
 (defun melpaca--init-package-lint ()
