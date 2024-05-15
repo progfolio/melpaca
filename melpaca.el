@@ -65,7 +65,8 @@
          (let* ((,testsym (melpaca--test ,@arglist))
                 (melpaca--test-output nil))
            (condition-case err
-               (push (cons 'pass ,(macroexp-progn body)) melpaca--test-output)
+               (when-let ((output ,(macroexp-progn body)))
+                 (push (cons 'pass output) melpaca--test-output))
              ((error) (melpaca-error "%S" err)))
            (melpaca-print-test (melpaca--test-title ,testsym)
                                (melpaca--test-syntax ,testsym)
