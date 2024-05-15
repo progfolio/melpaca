@@ -189,8 +189,9 @@ Return t if test passes, nil otherwise."
       (condition-case err
           (progn (elpaca-try recipe)
                  (elpaca-wait)
-                 (when (eq (elpaca--status id) 'failed)
-                   (list (cons 'error (nth 2 (car (elpaca<-log (elpaca-get 'doct))))))))
+                 (when-let ((e (elpaca-get id))
+                            ((eq (elpaca--status e) 'failed)))
+                   (list (cons 'error (nth 2 (car (elpaca<-log e)))))))
         ((error) (list (cons 'error err)))))
      (melpaca--test
       "Package compiles cleanly" 'emacs-lisp
