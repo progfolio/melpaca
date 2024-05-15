@@ -172,7 +172,7 @@ Return t if test passes, nil otherwise."
           (cons 'error (format "%S returned statsus %S" url url-http-response-status))))
     ((error) (list (cons 'error err)))))
 
-(defun melpaca--display-results (_)
+(defun melpaca--display-results ()
   "Print test results."
   (pop-to-buffer (current-buffer) '((display-buffer-reuse-window))))
 
