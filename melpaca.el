@@ -65,7 +65,7 @@
       (push (cons 'warning (format "Recipe ID %s shadows built-in Emacs package" id))
             warnings))
     (when-let ((repo (plist-get :repo (cdr object)))
-               (name (cadr (string-split repo "/" )))
+               (name (cadr (split-string repo "/" )))
                ((not (equal (file-name-sans-extension name) (symbol-name id)))))
       (push (cons 'warning (format "Recipe ID %s does not match :repo name %s" id name))
             warnings))
