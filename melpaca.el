@@ -60,23 +60,18 @@
   (defmacro melpaca-deftest (arglist &rest body)
     "Run test thunk with ARGLIST and BODY."
     (declare (indent 1) (debug t))
-    (let ((testsym (make-symbol "test"))
-          (resultsym (make-symbol "result"))
-          (passsym (make-symbol "pass"))
-          (failsym (make-symbol "fail")))
+    (let ((testsym (make-symbol "test")))
       `(lambda (pr)
-         (let* ((melpaca--test-output nil)
-                (,testsym (melpaca--test ,@arglist))
-                (,resultsym (condition-case err
-                                (cons ',passsym ,(macroexp-progn body))
-                              ((error)
-                               (melpaca-error "%S" err)
-                               (cons ',failsym err)))))
+         (let* ((,testsym (melpaca--test ,@arglist))
+                (melpaca--test-output nil))
+           (condition-case err
+               (push (cons 'pass ,(macroexp-progn body)) melpaca--test-output)
+             ((error) (melpaca-error "%S" err)))
            (melpaca-print-test (melpaca--test-title ,testsym)
                                (melpaca--test-syntax ,testsym)
                                melpaca--test-output)
-           (not (and (melpaca--test-required ,testsym)
-                     (eq (car-safe ,resultsym) ',failsym))))))))
+           (or (not (melpaca--test-required ,testsym))
+               (eq (melpaca-test-status) 'pass)))))))
 
 (defun melpaca-recipe (pr)
   "Return recipe from PR alist."
