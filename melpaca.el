@@ -188,11 +188,11 @@
   (let* ((status (melpaca-test-status results))
          (passp (eq status 'pass)))
     (princ (concat "\n"
-                   (format "<details open=%S><summary>" (when passp "false" "true"))
+                   (format "<details open=%S><summary>" (if passp "false" "true"))
                    (alist-get status melpaca-test-status-indicators) " " heading
                    (unless passp  "</summary>")
-                   "\n"))
-    (princ (format "\n```%s\n%s\n```\n</details>"
+                   "\n\n"))
+    (princ (format "\n```%s\n%s\n```\n</details>\n"
                    (or type "")
                    (mapconcat (lambda (r) (format "%s" (cdr r))) results "\n")))))
 
