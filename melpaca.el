@@ -79,11 +79,11 @@
 
 (defcustom melpaca-test-functions
   (list
-   (melpaca-deftest (:title "Testing Recipe" :required t :syntax 'emacs-lisp)
-     (princ (melpaca-recipe pr)))
+   (melpaca-deftest (:title "PR Recipe Parsed" :required t :syntax 'emacs-lisp)
+     (or (melpaca-recipe pr) (error "Unable to parse recipe")))
    (melpaca-deftest (:title "Submission contains 1 recipe" :required t)
-     (unless (= (alist-get 'changed_files pr) 1)
-       (melpaca-error "Please submit a single recipe per pull request")))
+     (or (= (alist-get 'changed_files pr) 1)
+         (error "Please submit a single recipe per pull request")))
    (melpaca-deftest (:title "Package recipe valid" :required t)
      (melpaca-validate-recipe (melpaca-recipe pr)))
    (melpaca-deftest (:title "Package upstream reachable" :required t)
