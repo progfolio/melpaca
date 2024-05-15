@@ -5,7 +5,7 @@
 ;; Author: Nicholas Vollmer) <nv@parenthetic.dev>
 ;; Keywords: convenience, tools
 ;; Homepage: https://www.github.com/progfolio/melpaca
-;; Package-Requires: ((emacs "27.1"))
+;; Package-Requires: ((emacs "27.1") (elpaca "0.0.2"))
 ;; Version: 0.0.0
 
 ;; This program is free software; you can redistribute it and/or modify
