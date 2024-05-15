@@ -1,10 +1,11 @@
-;;; init.el --- Melpaca Script  -*- lexical-binding: t; -*-
+;;; init.el --- MELPACA Script  -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;;
 
 ;;; Code:
 
+;; Elpaca installer
 (declare-function elpaca-generate-autoloads "elpaca")
 (declare-function elpaca-process-queues "elpaca")
 (declare-function elpaca "elpaca")
