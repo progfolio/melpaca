@@ -50,18 +50,19 @@
 
 (require 'melpaca)
 
-(defvar melpaca-after-test-function)
-(setq melpaca-after-test-function
-      (lambda () (with-current-buffer (get-buffer-create "*melpaca*")
-                   (let ((f (expand-file-name "pr")))
-                     (message "Writing %s" f)
-                     (write-file f)
-                     (kill-emacs)))))
-
-(declare-function melpaca "melpaca")
-(let ((melpaca-repo "progfolio/melpaca"))
+(let ((melpaca-repo "progfolio/melpaca")
+      (melpaca-after-test-function
+       (lambda () (with-current-buffer (get-buffer-create "*melpaca*")
+                    (let ((f (expand-file-name "pr")))
+                      (message "Writing %s" f)
+                      (write-file f)
+                      (kill-emacs))))))
   (melpaca (getenv "PULLREQUEST")))
 
 (provide 'init)
+
+;; Local Variables:
+;; no-byte-compile: t
+;; End:
 
 ;;; init.el ends here
