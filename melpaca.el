@@ -128,7 +128,6 @@
         warnings)
     ((error) (list (cons 'error (cadr err))))))
 
-
 (declare-function elpaca-log "elpaca-log")
 (defun melpaca--test (heading type results)
   "Print HEADING, test RESULTS of TYPE.
