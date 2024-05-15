@@ -40,7 +40,7 @@
   "Function run once test is finished."
   :type 'function)
 
-(defcustom melpaca-repo nil "USER/REPO to request PR info from." :type 'string)
+(defcustom melpaca-repo "melpa/melpa" "USER/REPO to request PR info from." :type 'string)
 
 (defvar melpaca-generic-fetchers '(git hg))
 (defvar melpaca-fetchers (append melpaca-generic-fetchers '(github gitlab codeberg sourcehut)))
