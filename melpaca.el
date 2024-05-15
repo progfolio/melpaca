@@ -88,7 +88,7 @@
    (melpaca-deftest (:title "Package recipe valid" :required t)
      (melpaca-validate-recipe (melpaca-recipe pr)))
    (melpaca-deftest (:title "Package upstream reachable" :required t)
-     (melpaca--validate-upstream-url (alist-get 'info (alist-get 'melpaca pr))))
+     (melpaca--validate-upstream-url (alist-get 'url (alist-get 'melpaca pr))))
    (melpaca-deftest (:title "Package installs" :required t :syntax 'emacs-lisp)
      (let* ((recipe (melpaca-recipe pr))
             (id (car recipe)))
