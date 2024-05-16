@@ -55,24 +55,44 @@
   "Alist of form ((STATUS . STRING)...)."
   :type 'alist)
 
-(defvar melpaca--test-output nil)
+(cl-defstruct (melpaca-test (:constructor melpaca-test) (:copier nil) (:named))
+  "Test struct."
+  title required syntax output warnings errors)
+
+(defun melpaca-print-test (test)
+  "Print TEST."
+  (let* ((warnings (melpaca-test-errors test))
+         (errors (melpaca-test-errors test))
+         (output (melpaca-test-output test))
+         (summary (format "%s %s\n\n"
+                          (alist-get (cond (errors 'error) (warnings 'warning) (t 'pass))
+                                     melpaca-test-status-indicators)
+                          (melpaca-test-title test)))
+         (results (append warnings output)))
+    (princ "\n")
+    (if (not results) (princ summary)
+      (princ (format "<details%s><summary>%s</summary>\n\n```%s\n%s\n```\n</details>\n"
+                     (if (or warnings errors) " open" "")
+                     (string-trim summary)
+                     (or (melpaca-test-syntax test) "")
+                     (mapconcat (lambda (el) (if (stringp el) el (format "%S" el)))
+                                results "\n"))))))
+
+(defvar melpaca-current-test nil)
 (eval-and-compile
   (defmacro melpaca-deftest (arglist &rest body)
     "Run test thunk with ARGLIST and BODY."
     (declare (indent 1) (debug t))
-    (let ((testsym (make-symbol "test")))
-      `(lambda (pr)
-         (let* ((,testsym (melpaca--test ,@arglist))
-                (melpaca--test-output nil))
-           (condition-case err
-               (when-let ((output ,(macroexp-progn body)))
-                 (push (cons 'pass output) melpaca--test-output))
-             ((error) (melpaca-error "%S" err)))
-           (melpaca-print-test (melpaca--test-title ,testsym)
-                               (melpaca--test-syntax ,testsym)
-                               melpaca--test-output)
-           (not (and (melpaca--test-required ,testsym)
-                     (eq (melpaca-test-status) 'error))))))))
+    `(lambda (pr)
+       (cl-letf ((melpaca-current-test (melpaca-test ,@arglist))
+                 ((symbol-function 'warn) #'format))
+         (condition-case err
+             (when-let ((output ,(macroexp-progn body)))
+               (push output (melpaca-test-output melpaca-current-test)))
+           ((error) (push (format (cadr err) (cddr err)) (melpaca-test-errors melpaca-current-test))))
+         (melpaca-print-test melpaca-current-test)
+         (not (and (melpaca-test-required melpaca-current-test)
+                   (melpaca-test-errors melpaca-current-test)))))))
 
 (defcustom melpaca-test-functions
   (list
@@ -93,28 +113,28 @@
        (when-let ((e (elpaca-get id))
                   ((eq (elpaca--status e) 'failed))
                   (info (nth 2 (car (elpaca<-log e)))))
-         (melpaca-error "%s" info))))
+         (error "%s" info))))
    (melpaca-deftest (:title "Package compiles cleanly" :syntax 'emacs-lisp)
      (let* ((id (car (alist-get 'melpaca-recipe pr)))
             (pkg (symbol-name id))
             (regexp (concat "^" pkg)))
-       (with-current-buffer (elpaca-log (concat regexp " | byte-comp | Warning\\|Error") t)
-         (setq melpaca--test-output
-               (cl-loop for entry in tabulated-list-entries
-                        for info = (aref (cadr entry) 2)
-                        collect (cons (if (string-match-p "Warning" info) 'warning 'error)
-                                      info))))))
-   (progn
-     (declare-function package-lint-buffer "package-lint")
-     (melpaca-deftest  (:title "Package satisfies package-lint" :syntax 'emacs-lisp)
-       (let* ((e (elpaca-get (car (alist-get 'melpaca-recipe pr))))
-              (main (elpaca<-main e)))
-         (find-file (expand-file-name main (elpaca<-repo-dir e)))
-         (melpaca--init-package-lint)
-         (cl-loop for (line col type message) in (package-lint-buffer)
-                  do (push (cons type (format "%s:%s %s" line col message))
-                           melpaca--test-output))
-         nil))))
+       (with-current-buffer (elpaca-log (concat regexp " | byte-comp | warn\\|error ") t)
+         (cl-loop for entry in tabulated-list-entries
+                  do (push (string-trim (aref (cadr entry) 2))
+                           (melpaca-test-errors melpaca-current-test))))))
+   (melpaca-deftest  (:title "Package satisfies package-lint" :syntax 'emacs-lisp)
+     (let* ((e (elpaca-get (car (alist-get 'melpaca-recipe pr))))
+            (main (elpaca<-main e))
+            (repo (elpaca<-repo-dir e)))
+       (melpaca--init-package-lint)
+       (setf (melpaca-test-title melpaca-current-test)
+             (replace-regexp-in-string "Package" (melpaca-test-title melpaca-current-test)
+                                       main))
+       (declare-function package-lint-buffer "package-lint")
+       (cl-loop for (line col type message) in
+                (package-lint-buffer (find-file-noselect (expand-file-name main repo)))
+                do (push (format "%d:%d %s %s\n" type line col message)
+                         (melpaca-test-errors melpaca-current-test))))))
   "List of tests to run in test sub-process. Each is called with a PR alist."
   :type '(list function))
 
@@ -130,15 +150,15 @@
   (let ((id (or (car-safe object) (error "Reicpe must be a non-nil list"))))
     (unless (symbolp id) (error "Recipe ID %S must be a symbol" id))
     (unless (> (length (symbol-name id)) 2)
-      (melpaca-warn "Recipe ID %s should be longer than 2 characters" id))
+      (warn "Recipe ID %s should be longer than 2 characters" id))
     (when (elpaca-menu-item id) ;;@TODO: hg type support in menu
-      (melpaca-warn "Recipe ID %s already present in MELPA archive" id))
+      (warn "Recipe ID %s already present in MELPA archive" id))
     (when (alist-get id package--builtin-versions)
-      (melpaca-warn "Recipe ID %s shadows built-in Emacs package" id))
+      (warn "Recipe ID %s shadows built-in Emacs package" id))
     (when-let ((repo (plist-get :repo (cdr object)))
                (name (cadr (split-string repo "/" )))
                ((not (equal (file-name-sans-extension name) (symbol-name id)))))
-      (melpaca-warn "Recipe ID %s does not match :repo name %s" id name))))
+      (warn "Recipe ID %s does not match :repo name %s" id name))))
 
 (defun melpaca--validate-files (files)
   "Signal error if FILES is not a valid MELPA recipe :files list."
@@ -180,40 +200,19 @@
       (error ":repo must not include \"~\" in Sourcehut user-name"))
     (when (and branch commit) (error "Cannot use :branch and :commit at same time"))
     (when commit
-      (when (eq fetcher 'hg) (melpaca-warn ":fetcher hg ignores :commit %s" commit))
+      (when (eq fetcher 'hg) (warn ":fetcher hg ignores :commit %s" commit))
       (unless (stringp commit) (error ":commit must be a string")))
     (when branch
       ;;@TODO: :branch valid for :fetcher hg?
       (unless (stringp branch) (error ":branch must be a string")))
     (when version-regexp
-      (melpaca-warn ":version-regexp rarely necessary")
+      (warn ":version-regexp rarely necessary")
       (unless (stringp version-regexp) (error ":verson-regexp must be a string")))
     (when files
-      (melpaca-warn ":files rarely necessary")
+      (warn ":files rarely necessary")
       (melpaca--validate-files files))
     (when old-names (unless (and (listp old-names) (cl-every #'symbolp old-names))
                       (error ":old-names must be a list of symbols")))))
-
-(defun melpaca-test-status (&optional results)
-  "Return overall status of test RESULTS."
-  (unless results (setq results melpaca--test-output))
-  (cond ((assoc 'error melpaca--test-output) 'error)
-        ((assoc 'warning melpaca--test-output) 'warning)
-        (t 'pass)))
-
-(defun melpaca-print-test (heading type results)
-  "Print HEADING, test RESULTS of TYPE."
-  (let* ((status (melpaca-test-status results))
-         (passp (eq status 'pass))
-         (summary (concat (alist-get status melpaca-test-status-indicators)
-                          " " heading "\n\n")))
-    (princ "\n")
-    (if (not results) (princ summary)
-      (princ (format "<details%s><summary>%s</summary>\n\n```%s\n%s\n```\n</details>\n"
-                     (if passp "" " open")
-                     (string-trim summary)
-                     (or type "")
-                     (mapconcat (lambda (r) (format "%s" (cdr r))) results "\n"))))))
 
 (defvar package-archives)
 (defun melpaca--init-package-lint ()
@@ -270,22 +269,6 @@
         (push (cons 'melpaca-recipe (melpaca--diff-to-recipe (alist-get 'diff_url pr))) pr)
         (push (cons 'melpaca-info (melpaca--parse-pr-post (alist-get 'body pr))) pr)
         pr))))
-
-(cl-defstruct (melpaca--test (:constructor melpaca--test) (:copier nil) (:named))
-  "Test struct."
-  title required syntax)
-
-(defun melpaca-test-output (type info &rest args)
-  "Push TYPE INFO formatted with ARGS to `melpaca--test-output'."
-  (push (cons type (apply #'format info args)) melpaca--test-output))
-
-(defun melpaca-error (info &rest args)
-  "Fail test with INFO ARGS."
-  (apply #'melpaca-test-output 'error info args))
-
-(defun melpaca-warn (info &rest args)
-  "Warn with INFO ARGS."
-  (apply #'melpaca-test-output 'warning info args))
 
 (cl-defun melpaca (number) ;;@TODO make test sequence user option
   "Provide feedback for Pull Request with NUMBER."
