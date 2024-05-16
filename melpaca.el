@@ -122,7 +122,7 @@
          (cl-loop for entry in tabulated-list-entries
                   do (push (string-trim (aref (cadr entry) 2))
                            (melpaca-test-errors melpaca-current-test))))))
-   (melpaca-deftest  (:title "Package satisfies package-lint" :syntax 'emacs-lisp)
+   (melpaca-deftest (:title "Package satisfies package-lint" :syntax 'emacs-lisp)
      (let* ((e (elpaca-get (car (alist-get 'melpaca-recipe pr))))
             (main (elpaca<-main e))
             (repo (elpaca<-repo-dir e)))
