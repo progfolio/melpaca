@@ -128,13 +128,17 @@
             (repo (elpaca<-repo-dir e)))
        (melpaca--init-package-lint)
        (setf (melpaca-test-title melpaca-current-test)
-             (replace-regexp-in-string "Package" (melpaca-test-title melpaca-current-test)
-                                       main))
-       (declare-function package-lint-buffer "package-lint")
-       (cl-loop for (line col type message) in
-                (package-lint-buffer (find-file-noselect (expand-file-name main repo)))
-                do (push (format "%d:%d %s %s\n" type line col message)
-                         (melpaca-test-errors melpaca-current-test))))))
+             (replace-regexp-in-string
+              "^Package" main (melpaca-test-title melpaca-current-test) 'fixedcase))
+       (declare-function package-lint-current-buffer "package-lint")
+       (with-current-buffer (find-file-noselect (expand-file-name main repo))
+         ;;@HACK: not sure why we can't use `package-lint-buffer'
+         (package-lint-current-buffer)
+         (with-current-buffer (get-buffer-create "*Package-Lint*")
+           (when-let ((issues (string-trim (buffer-string)))
+                      ((not (string-empty-p issues))))
+             (push issues (melpaca-test-errors melpaca-current-test))
+             nil))))))
   "List of tests to run in test sub-process. Each is called with a PR alist."
   :type '(list function))
 
