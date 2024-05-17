@@ -57,7 +57,7 @@
 
 (cl-defstruct (melpaca-test (:constructor melpaca-test) (:copier nil) (:named))
   "Test struct."
-  title required syntax output warnings errors)
+  title required syntax output warnings errors open)
 
 (defun melpaca-print-test (test)
   "Print TEST."
@@ -72,7 +72,7 @@
     (princ "\n")
     (if (not results) (princ summary)
       (princ (format "<details%s><summary>%s</summary>\n\n```%s\n%s\n```\n</details>\n"
-                     (if (or warnings errors) " open" "")
+                     (if (or (melpaca-test-open test) warnings errors) " open" "")
                      (string-trim summary)
                      (or (melpaca-test-syntax test) "")
                      (mapconcat (lambda (el) (if (stringp el) el (format "%S" el)))
@@ -96,11 +96,10 @@
 
 (defcustom melpaca-test-functions
   (list
-   (melpaca-deftest (:title "PR recipe parses" :required t :syntax 'emacs-lisp)
-     (or (alist-get 'melpaca-recipe pr) (error "Unable to parse recipe")))
-   (melpaca-deftest (:title "Submission contains 1 recipe")
-     (ignore (or (= (alist-get 'changed_files pr) 1)
-                 (error "Please submit a single recipe per pull request"))))
+   (melpaca-deftest (:title "Submission contains 1 recipe" :open t)
+     (if (= (alist-get 'changed_files pr) 1)
+         (or (alist-get 'melpaca-recipe pr) (error "Unable to parse PR diff"))
+       (error "Please submit a single recipe per pull request")))
    (melpaca-deftest (:title "Package recipe valid" :required t)
      (melpaca-validate-recipe (alist-get 'melpaca-recipe pr)))
    (melpaca-deftest (:title "Package upstream reachable")
