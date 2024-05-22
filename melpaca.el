@@ -157,7 +157,8 @@
          (package-lint-current-buffer)
          (with-current-buffer (get-buffer-create "*Package-Lint*")
            (when-let ((issues (string-trim (buffer-string)))
-                      ((not (string-empty-p issues))))
+                      ((not (or (string-empty-p issues)
+                                (string-match-p "No issues found." issues)))))
              (push issues (melpaca-test-errors melpaca-current-test))
              nil))))))
   "List of tests to run in test sub-process. Each is called with a PR alist."
