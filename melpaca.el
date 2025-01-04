@@ -1,6 +1,6 @@
 ;;; melpaca.el --- CI tool for MELPA  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2024  Nicholas Vollmer
+;; Copyright (C) 2024-2025  Nicholas Vollmer
 
 ;; Author: Nicholas Vollmer) <nv@parenthetic.dev>
 ;; Keywords: convenience, tools
