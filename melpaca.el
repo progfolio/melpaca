@@ -113,7 +113,7 @@
                 ((eq (elpaca--status e) 'failed))
                 (info (nth 2 (car (elpaca<-log e)))))
            (error "%s" info)
-         (let ((default-directory (elpaca<-repo-dir e)))
+         (let ((default-directory (elpaca<-src-dir e)))
            (ignore-errors
              (string-trim (elpaca-process-output "git" "rev-parse" "--short" "HEAD")))))))
    (melpaca-deftest (:title "Package compiles cleanly" :syntax 'emacs-lisp)
@@ -136,7 +136,7 @@
                (checkdoc-proper-noun-list nil)
                (checkdoc-verb-check-experimental-flag nil)
                (sentence-end-double-space nil))
-           (cl-loop for file in (directory-files-recursively (elpaca<-repo-dir e)
+           (cl-loop for file in (directory-files-recursively (elpaca<-src-dir e)
                                                              "\\`[^.]+\\.el\\'")
                     do (with-current-buffer (find-file-noselect file)
                          (checkdoc-current-buffer 'take-notes)))
@@ -149,7 +149,7 @@
    (melpaca-deftest (:title "Package satisfies package-lint" :syntax 'emacs-lisp)
      (let* ((e (elpaca-get (car (alist-get 'melpaca-recipe pr))))
             (main (elpaca<-main e))
-            (repo (elpaca<-repo-dir e)))
+            (repo (elpaca<-src-dir e)))
        (melpaca--init-package-lint)
        (setf (melpaca-test-title melpaca-current-test)
              (replace-regexp-in-string
