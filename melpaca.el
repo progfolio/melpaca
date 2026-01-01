@@ -1,8 +1,8 @@
 ;;; melpaca.el --- CI tool for MELPA  -*- lexical-binding: t; -*-
 
-;; Copyright (C) 2024-2025  Nicholas Vollmer
+;; Copyright (C) 2024-2026  Nicholas Vollmer
 
-;; Author: Nicholas Vollmer) <nv@parenthetic.dev>
+;; Author: Nicholas Vollmer
 ;; Keywords: convenience, tools
 ;; Homepage: https://www.github.com/progfolio/melpaca
 ;; Package-Requires: ((emacs "27.1") (elpaca "0.0.2"))
