@@ -1,0 +1,1 @@
+(read-duration :fetcher github :repo "ichernyshovvv/read-duration.el")
